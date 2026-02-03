@@ -13,6 +13,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { BottomNav, type BottomNavView } from "../components/BottomNav";
+import { supabase } from "@/lib/supabase";
+import { getUserProfile } from "@/lib/auth";
 
 type ProfileData = {
   name: string;
@@ -41,13 +43,26 @@ export default function ProfileScreen() {
   useEffect(() => {
     const loadProfile = async () => {
       try {
-        // TODO: replace with real API when you have apiUrl + auth
-        // const session = await getSession(); // e.g. from Supabase
-        // const res = await fetch(`${apiUrl}/profile`, { headers: { Authorization: `Bearer ${token}` } });
-        // const data = await res.json();
-        // if (res.ok) setProfile(data);
-        await new Promise((r) => setTimeout(r, 400));
-        setProfile(DEFAULT_PROFILE);
+        const { data: { session } } = await supabase.auth.getSession();
+        
+        if (session?.user) {
+          const userProfile = await getUserProfile(session.user.id);
+          
+          if (userProfile) {
+            setProfile({
+              name: userProfile.name,
+              phone: userProfile.phone,
+              email: userProfile.email,
+            });
+          } else {
+            // Fallback to auth metadata if profile not found
+            setProfile({
+              name: session.user.user_metadata?.name || "User",
+              phone: session.user.user_metadata?.phone || "",
+              email: session.user.email || "",
+            });
+          }
+        }
       } catch (error) {
         console.error("Error loading profile:", error);
       } finally {
@@ -65,7 +80,7 @@ export default function ProfileScreen() {
   };
 
   const handleNavChange = (view: BottomNavView) => {
-    if (view === "dashboard") router.replace("/");
+    if (view === "dashboard") router.replace("/home");
   };
 
   const handleLogout = () => {
@@ -74,9 +89,19 @@ export default function ProfileScreen() {
       "Are you sure you want to log out?",
       [
         { text: "Cancel", style: "cancel" },
-        { text: "Log out", style: "destructive", onPress: () => {
-          // TODO: clear session / Supabase signOut, then e.g. router.replace('/login')
-        } },
+        { 
+          text: "Log out", 
+          style: "destructive", 
+          onPress: async () => {
+            try {
+              await supabase.auth.signOut();
+              router.replace("/");
+            } catch (error) {
+              console.error("Logout error:", error);
+              Alert.alert("Error", "Failed to log out. Please try again.");
+            }
+          } 
+        },
       ]
     );
   };
