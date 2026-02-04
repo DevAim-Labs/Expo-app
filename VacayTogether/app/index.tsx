@@ -75,7 +75,7 @@ export default function LoginScreen() {
 
         // Check if email confirmation is required
         if (!result.session) {
-          setGeneralError("Please check your email to confirm your account before logging in.");
+          Alert.alert("Please verify your email to log in.");
           return;
         }
 
@@ -96,7 +96,10 @@ export default function LoginScreen() {
         setGeneralError("Too many attempts. Please wait a few minutes and try again.");
       } else if (error.message.includes("Email link is invalid") || error.message.includes("expired")) {
         setGeneralError("This link has expired. Please request a new one.");
-      } else {
+      } else if (error.message.includes("security purposes")) {
+        setGeneralError("Please wait before trying again."); 
+      }
+      else {
         setGeneralError(error.message || "An error occurred");
       }
     } finally {
