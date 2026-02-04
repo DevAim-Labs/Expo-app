@@ -39,6 +39,7 @@ export default function ProfileScreen() {
   const router = useRouter();
   const [profile, setProfile] = useState<ProfileData>(DEFAULT_PROFILE);
   const [isLoading, setIsLoading] = useState(true);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   useEffect(() => {
     const loadProfile = async () => {
@@ -84,6 +85,8 @@ export default function ProfileScreen() {
   };
 
   const handleLogout = () => {
+    if (isLoggingOut) return; // Prevent multiple clicks
+    
     Alert.alert(
       "Log out",
       "Are you sure you want to log out?",
@@ -93,12 +96,20 @@ export default function ProfileScreen() {
           text: "Log out", 
           style: "destructive", 
           onPress: async () => {
+            setIsLoggingOut(true);
             try {
-              await supabase.auth.signOut();
+              // Sign out from Supabase - this clears the session
+              const { error } = await supabase.auth.signOut();
+              
+              if (error) throw error;
+              
+              // Session is now cleared, redirect to login
+              // Using replace() prevents back navigation
               router.replace("/");
             } catch (error) {
               console.error("Logout error:", error);
               Alert.alert("Error", "Failed to log out. Please try again.");
+              setIsLoggingOut(false);
             }
           } 
         },
@@ -216,12 +227,15 @@ export default function ProfileScreen() {
 
         {/* Log out */}
         <TouchableOpacity
-          style={styles.logoutBtn}
+          style={[styles.logoutBtn, isLoggingOut && styles.logoutBtnDisabled]}
           onPress={handleLogout}
           activeOpacity={0.85}
+          disabled={isLoggingOut}
         >
-          <Ionicons name="log-out-outline" size={20} color="#E74C3C" />
-          <Text style={styles.logoutBtnText}>Logout Account</Text>
+          <Ionicons name="log-out-outline" size={20} color={isLoggingOut ? "#999" : "#E74C3C"} />
+          <Text style={[styles.logoutBtnText, isLoggingOut && styles.logoutBtnTextDisabled]}>
+            {isLoggingOut ? "Logging out..." : "Logout Account"}
+          </Text>
         </TouchableOpacity>
       </ScrollView>
 
@@ -390,9 +404,17 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(231, 76, 60, 0.3)",
   },
+  logoutBtnDisabled: {
+    backgroundColor: "rgba(200, 200, 200, 0.1)",
+    borderColor: "rgba(200, 200, 200, 0.3)",
+    opacity: 0.6,
+  },
   logoutBtnText: {
     fontSize: 16,
     fontWeight: "700",
     color: "#E74C3C",
+  },
+  logoutBtnTextDisabled: {
+    color: "#999",
   },
 });

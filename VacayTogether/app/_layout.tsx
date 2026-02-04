@@ -29,13 +29,25 @@ export default function RootLayout() {
   useEffect(() => {
     if (loading) return;
 
-    const inAuthGroup = segments[0] === "home";
+    // Protected routes that require authentication
+    const protectedRoutes = ['home', 'profile', 'album'];
+    
+    // Get current route - segments[0] is the first part of the path
+    const currentRoute = segments[0];
+    
+    // Check if current route is protected
+    const isProtectedRoute = currentRoute && protectedRoutes.includes(currentRoute);
+    
+    // Check if on login screen (no specific protected route)
+    const isOnLoginScreen = !isProtectedRoute;
 
-    if (!session && !inAuthGroup) {
-      // Redirect to login if not authenticated
+    if (!session && isProtectedRoute) {
+      // User is not logged in but trying to access protected route
+      // Redirect to login screen and prevent back navigation
       router.replace("/");
-    } else if (session && segments[0] === "home") {
-      // Redirect to home if already authenticated and on login page
+    } else if (session && isOnLoginScreen) {
+      // User is logged in but on login screen
+      // Redirect to home
       router.replace("/home");
     }
   }, [session, segments, loading]);
