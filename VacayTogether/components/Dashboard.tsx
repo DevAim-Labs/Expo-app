@@ -5,6 +5,7 @@ import {
   StyleSheet,
   TouchableOpacity,
   ScrollView,
+  Image,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
@@ -14,7 +15,7 @@ export type DashboardAlbum = {
   category: string;
   startDate: string;
   endDate: string;
-  thumbnailUrl?: string;
+  coverImage?: string | null;
 };
 
 type DashboardProps = {
@@ -68,14 +69,22 @@ export function Dashboard({ albums, onCreateClick, onAlbumClick }: DashboardProp
               activeOpacity={0.9}
             >
               <View style={styles.albumImageWrap}>
-                <View
-                  style={[
-                    styles.albumImagePlaceholder,
-                    { backgroundColor: CATEGORY_COLORS[album.category] ?? "#E0F2FE" },
-                  ]}
-                >
-                  <Ionicons name="location-outline" size={40} color="rgba(255,255,255,0.8)" />
-                </View>
+                {album.coverImage ? (
+                  <Image 
+                    source={{ uri: album.coverImage }} 
+                    style={styles.albumCoverImage}
+                    resizeMode="cover"
+                  />
+                ) : (
+                  <View
+                    style={[
+                      styles.albumImagePlaceholder,
+                      { backgroundColor: CATEGORY_COLORS[album.category] ?? "#E0F2FE" },
+                    ]}
+                  >
+                    <Ionicons name="location-outline" size={40} color="rgba(255,255,255,0.8)" />
+                  </View>
+                )}
                 <View style={styles.categoryTag}>
                   <Text style={styles.categoryTagText}>{album.category}</Text>
                 </View>
@@ -195,6 +204,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "#E0F2FE",
+  },
+  albumCoverImage: {
+    width: "100%",
+    height: "100%",
   },
   categoryTag: {
     position: "absolute",

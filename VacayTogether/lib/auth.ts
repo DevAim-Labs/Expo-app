@@ -12,6 +12,7 @@ export interface User {
   created_at: string;
   last_login?: string;
   is_active: boolean;
+  profile_picture_path?: string | null;
 }
 
 /**
@@ -208,4 +209,94 @@ export async function getCurrentSession() {
 export async function isAuthenticated(): Promise<boolean> {
   const session = await getCurrentSession();
   return !!session;
+}
+
+/**
+ * Upload profile picture
+ */
+export async function uploadProfilePicture(
+  userId: string,
+  imageUri: string
+): Promise<{ success: boolean; path?: string; error?: string }> {
+  try {
+    // Fetch the image
+    const response = await fetch(imageUri);
+    const arrayBuffer = await response.arrayBuffer();
+    
+    // Get file extension
+    const ext = imageUri.split('.').pop()?.toLowerCase() || 'jpg';
+    const fileName = `profile.${ext}`;
+    const filePath = `${userId}/${fileName}`;
+
+    // Upload to Supabase Storage
+    const { error: uploadError } = await supabase.storage
+      .from('profile-pictures')
+      .upload(filePath, arrayBuffer, {
+        contentType: `image/${ext}`,
+        upsert: true, // Replace existing profile picture
+      });
+
+    if (uploadError) throw uploadError;
+
+    // Update user record with new profile picture path
+    const { error: updateError } = await supabase.rpc('update_profile_picture', {
+      p_user_id: userId,
+      p_picture_path: filePath,
+    });
+
+    if (updateError) throw updateError;
+
+    return { success: true, path: filePath };
+  } catch (error: any) {
+    console.error('Error uploading profile picture:', error);
+    return { success: false, error: error.message || 'Failed to upload profile picture' };
+  }
+}
+
+/**
+ * Get profile picture URL
+ */
+export function getProfilePictureUrl(picturePath: string | null | undefined): string | null {
+  if (!picturePath) return null;
+  
+  const { data } = supabase.storage
+    .from('profile-pictures')
+    .getPublicUrl(picturePath);
+  
+  return data.publicUrl;
+}
+
+/**
+ * Delete profile picture
+ */
+export async function deleteProfilePicture(
+  userId: string
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    // Get current profile picture path
+    const user = await getUserProfile(userId);
+    if (!user?.profile_picture_path) {
+      return { success: true }; // No picture to delete
+    }
+
+    // Delete from storage
+    const { error: deleteError } = await supabase.storage
+      .from('profile-pictures')
+      .remove([user.profile_picture_path]);
+
+    if (deleteError) throw deleteError;
+
+    // Update user record to remove profile picture path
+    const { error: updateError } = await supabase.rpc('update_profile_picture', {
+      p_user_id: userId,
+      p_picture_path: null,
+    });
+
+    if (updateError) throw updateError;
+
+    return { success: true };
+  } catch (error: any) {
+    console.error('Error deleting profile picture:', error);
+    return { success: false, error: error.message || 'Failed to delete profile picture' };
+  }
 }

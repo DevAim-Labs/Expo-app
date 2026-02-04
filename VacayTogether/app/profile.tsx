@@ -8,18 +8,21 @@ import {
   TextInput,
   ActivityIndicator,
   Alert,
+  Image,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
+import * as ImagePicker from 'expo-image-picker';
 import { BottomNav, type BottomNavView } from "../components/BottomNav";
 import { supabase } from "@/lib/supabase";
-import { getUserProfile } from "@/lib/auth";
+import { getUserProfile, uploadProfilePicture, getProfilePictureUrl, deleteProfilePicture } from "@/lib/auth";
 
 type ProfileData = {
   name: string;
   phone: string;
   email: string;
+  profilePictureUrl?: string | null;
 };
 
 const MENU_ITEMS = [
@@ -40,6 +43,7 @@ export default function ProfileScreen() {
   const [profile, setProfile] = useState<ProfileData>(DEFAULT_PROFILE);
   const [isLoading, setIsLoading] = useState(true);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [isUploadingPicture, setIsUploadingPicture] = useState(false);
 
   useEffect(() => {
     const loadProfile = async () => {
@@ -54,6 +58,7 @@ export default function ProfileScreen() {
               name: userProfile.name,
               phone: userProfile.phone,
               email: userProfile.email,
+              profilePictureUrl: getProfilePictureUrl(userProfile.profile_picture_path),
             });
           } else {
             // Fallback to auth metadata if profile not found
@@ -61,6 +66,7 @@ export default function ProfileScreen() {
               name: session.user.user_metadata?.name || "User",
               phone: session.user.user_metadata?.phone || "",
               email: session.user.email || "",
+              profilePictureUrl: null,
             });
           }
         }
@@ -82,6 +88,83 @@ export default function ProfileScreen() {
 
   const handleNavChange = (view: BottomNavView) => {
     if (view === "dashboard") router.replace("/home");
+  };
+
+  const handleUploadProfilePicture = async () => {
+    try {
+      // Request permission
+      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      
+      if (permissionResult.granted === false) {
+        Alert.alert("Permission Required", "Please allow access to your photo library.");
+        return;
+      }
+
+      // Launch image picker
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsEditing: true,
+        aspect: [1, 1], // Square for profile picture
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        setIsUploadingPicture(true);
+        
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session?.user) {
+          Alert.alert("Error", "Not authenticated");
+          return;
+        }
+
+        const uploadResult = await uploadProfilePicture(session.user.id, result.assets[0].uri);
+        
+        if (uploadResult.success && uploadResult.path) {
+          // Update local state with new profile picture
+          setProfile(prev => ({
+            ...prev,
+            profilePictureUrl: getProfilePictureUrl(uploadResult.path),
+          }));
+          Alert.alert("Success", "Profile picture updated!");
+        } else {
+          Alert.alert("Error", uploadResult.error || "Failed to upload profile picture");
+        }
+      }
+    } catch (error: any) {
+      console.error("Error uploading profile picture:", error);
+      Alert.alert("Error", "Failed to upload profile picture");
+    } finally {
+      setIsUploadingPicture(false);
+    }
+  };
+
+  const handleDeleteProfilePicture = () => {
+    Alert.alert(
+      "Delete Profile Picture",
+      "Are you sure you want to delete your profile picture?",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (!session?.user) return;
+
+            setIsUploadingPicture(true);
+            const result = await deleteProfilePicture(session.user.id);
+            setIsUploadingPicture(false);
+
+            if (result.success) {
+              setProfile(prev => ({ ...prev, profilePictureUrl: null }));
+              Alert.alert("Success", "Profile picture deleted");
+            } else {
+              Alert.alert("Error", result.error || "Failed to delete profile picture");
+            }
+          },
+        },
+      ]
+    );
   };
 
   const handleLogout = () => {
@@ -144,15 +227,32 @@ export default function ProfileScreen() {
         {/* Avatar + camera button */}
         <View style={styles.profileTop}>
           <View style={styles.avatarWrapper}>
-            <View style={styles.avatar}>
-              <Text style={styles.avatarInitials}>{initials}</Text>
-            </View>
-            <TouchableOpacity style={styles.avatarEditBtn}>
-              <Ionicons name="camera" size={18} color="#2D9CDB" />
-            </TouchableOpacity>
+            {profile.profilePictureUrl ? (
+              <Image source={{ uri: profile.profilePictureUrl }} style={styles.avatar} />
+            ) : (
+              <View style={styles.avatar}>
+                <Text style={styles.avatarInitials}>{initials}</Text>
+              </View>
+            )}
+            {isUploadingPicture ? (
+              <View style={styles.avatarEditBtn}>
+                <ActivityIndicator size="small" color="#2D9CDB" />
+              </View>
+            ) : (
+              <TouchableOpacity 
+                style={styles.avatarEditBtn}
+                onPress={handleUploadProfilePicture}
+                onLongPress={profile.profilePictureUrl ? handleDeleteProfilePicture : undefined}
+              >
+                <Ionicons name="camera" size={18} color="#2D9CDB" />
+              </TouchableOpacity>
+            )}
           </View>
           <Text style={styles.profileName}>{profile.name || "Explorer"}</Text>
           <Text style={styles.profileSubtitle}>Vacation Member</Text>
+          {profile.profilePictureUrl && (
+            <Text style={styles.profileHint}>Long press camera to remove picture</Text>
+          )}
         </View>
 
         {/* Details box */}
@@ -316,6 +416,12 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: "#6B6B6B",
     fontWeight: "500",
+  },
+  profileHint: {
+    fontSize: 12,
+    color: "#9E9E9E",
+    marginTop: 4,
+    fontStyle: "italic",
   },
   detailsBox: {
     backgroundColor: "#FFFFFF",
